@@ -178,7 +178,7 @@ async def process_user_intent(req: IntentRequest, db: AsyncSession = Depends(get
 
         # 12. Generate 3-Minute Quote Lock & Hash
         quote_id = f"QUOTE_{uuid.uuid4().hex[:8]}"
-        expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=3)
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=3)
         
         quote_payload = {
             "quote_id": quote_id,

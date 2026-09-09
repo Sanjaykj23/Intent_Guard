@@ -7,7 +7,7 @@ from backend.app.search.providers.live_web_search import live_web_search_agent
 
 class CommerceActionAdapter(BaseActionAdapter):
     async def acm_discover(self, intent_slots: Dict[str, Any]) -> List[UCPActionCandidate]:
-        now_str = datetime.datetime.utcnow().isoformat()
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         query = (intent_slots.get("product") or "").lower()
         max_price_paise = intent_slots.get("max_price_paise")
         category = intent_slots.get("category", "commerce")

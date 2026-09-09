@@ -26,11 +26,11 @@ operator_lookup_api = OperatorLookupAPI()
 
 class TelecomActionAdapter(BaseActionAdapter):
     async def acm_discover(self, intent_slots: Dict[str, Any]) -> List[UCPActionCandidate]:
-        now_str = datetime.datetime.utcnow().isoformat()
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         max_price_paise = intent_slots.get("max_price_paise")
         query = intent_slots.get("product") or "mobile recharge plan"
 
-        live_plans = await live_web_search_agent._search_via_open_web(query, category="recharge", max_price_paise=max_price_paise)
+        live_plans = await live_web_search_agent.search_live_internet(query, category="recharge", max_price_paise=max_price_paise)
         
         candidates = []
         for p in live_plans:

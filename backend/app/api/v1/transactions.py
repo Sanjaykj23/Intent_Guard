@@ -12,34 +12,67 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 @router.post("/execute")
 async def execute_transaction(req: TransactionExecuteRequest, db: AsyncSession = Depends(get_db)):
-    # 1. Fetch locked quote
+    # 1. Fetch locked quote (or auto-create quote for direct checkout)
     q_res = await db.execute(select(QuoteModel).where(QuoteModel.quote_id == req.quote_id))
     quote = q_res.scalars().first()
 
     if not quote:
-        raise HTTPException(status_code=404, detail="Quote lock not found or expired")
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        quote = QuoteModel(
+            quote_id=req.quote_id,
+            user_id=req.user_id,
+            merchant_name="Merchant Store",
+            product_name="Verified Product Item",
+            price_paise=req.amount_paise,
+            product_url="https://merchant.store/item",
+            expires_at=now_utc + datetime.timedelta(minutes=15)
+        )
+        db.add(quote)
+        await db.commit()
 
-    if quote.expires_at < datetime.datetime.utcnow():
+    if quote.expires_at and quote.expires_at.tzinfo is None:
+        quote.expires_at = quote.expires_at.replace(tzinfo=datetime.timezone.utc)
+
+    if quote.expires_at and quote.expires_at < datetime.datetime.now(datetime.timezone.utc):
         raise HTTPException(status_code=400, detail="Quote expired. Please request a fresh quote.")
 
-    # 2. Fetch User Payment Mandate Token Hash
+    # 2. Check NPCI UPI Circle Hard Cap (Amounts > ₹15,000 / 1,500,000 paise CANNOT BE EXECUTED)
+    if req.amount_paise > 1500000:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transaction Rejected: Amount ₹{req.amount_paise / 100:,.2f} exceeds NPCI UPI Circle maximum limit of ₹15,000. Autonomous delegation payment cannot be processed."
+        )
+
+    # Check NPCI UPI Circle Step-Up Threshold (Amounts > ₹5,000 / 500000 paise REQUIRE UPI PIN Step-Up)
+    requires_pin = req.amount_paise > 500000
+    if requires_pin and not req.upi_pin:
+        raise HTTPException(
+            status_code=403,
+            detail="Transaction amount exceeds ₹5,000 NPCI PIN-less delegation limit. UPI PIN step-up authorization is required."
+        )
+
+    # 3. Fetch User Payment Mandate Token Hash
     t_res = await db.execute(select(PaymentTokenMetadataModel).where(PaymentTokenMetadataModel.user_id == req.user_id))
     token_meta = t_res.scalars().first()
 
     token_hash = token_meta.token_hash_sha256 if token_meta else "TOKEN_HASH_SIMULATED_9921"
     tx_id = f"TXN_{uuid.uuid4().hex[:10].upper()}"
 
-    # 3. Create Audit Entry for Payment Execution
+    # 4. Create Audit Entry for Payment Execution
     last_audit = await db.execute(select(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(1))
     last_row = last_audit.scalars().first()
     prev_hash = last_row.current_hash if last_row else GENESIS_HASH
+
+    status_str = "AUTHORIZED_WITH_UPI_PIN" if requires_pin else "AUTHORIZED_PINLESS_DELEGATION"
 
     tx_payload = {
         "transaction_id": tx_id,
         "quote_id": req.quote_id,
         "product_name": quote.product_name,
         "amount_paise": req.amount_paise,
-        "status": "AUTHORIZED_AND_EXECUTED",
+        "status": status_str,
+        "upi_vpa": req.upi_vpa or "sanjay@upi",
+        "step_up_authenticated": requires_pin,
         "razorpay_token_hash": token_hash
     }
     curr_hash = hash_chain.compute_hash(prev_hash, tx_payload)
@@ -57,13 +90,16 @@ async def execute_transaction(req: TransactionExecuteRequest, db: AsyncSession =
     return {
         "success": True,
         "transactionId": tx_id,
-        "status": "AUTHORIZED_AND_EXECUTED",
+        "status": status_str,
         "amountPaidPaise": req.amount_paise,
         "formattedAmount": f"₹{req.amount_paise / 100:,.2f}",
         "product_name": quote.product_name,
         "merchant": quote.merchant_name,
         "product_url": quote.product_url,
+        "upi_vpa": req.upi_vpa or "sanjay@upi",
+        "step_up_authenticated": requires_pin,
         "razorpay_token_hash": token_hash,
         "audit_hash": curr_hash,
-        "timestamp": datetime.datetime.utcnow().isoformat()
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
+

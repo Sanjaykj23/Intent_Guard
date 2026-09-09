@@ -17,5 +17,7 @@ class Settings(BaseModel):
     SERPER_API_KEY: str = os.getenv("SERPER_API_KEY", "")
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "rzp_test_mock_12345")
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "rzp_test_secret_67890")
+    SECONDARY_AGENT_VPA: str = os.getenv("SECONDARY_AGENT_VPA", "agent.antigravity@psp")
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "intentguard_jwt_secret_key_2026_super_secure")
 
 settings = Settings()

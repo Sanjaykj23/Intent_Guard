@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AuthScreen from './components/AuthScreen';
 import LockScreen from './components/LockScreen';
 import Home from './pages/Home';
@@ -7,14 +7,25 @@ import Home from './pages/Home';
  * App Component — Root Application Routing & Security State Management
  */
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => {
+    const saved = localStorage.getItem('intentguard_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!authenticatedUser);
   const [isLocked, setIsLocked] = useState(false);
-  const [authenticatedUser, setAuthenticatedUser] = useState(null);
 
   // Authentication Success Callback
   const handleAuthenticate = (userData) => {
     setAuthenticatedUser(userData);
     setIsAuthenticated(true);
+    setIsLocked(false);
+  };
+
+  // Logout / Switch Account Action
+  const handleLogout = () => {
+    localStorage.removeItem('intentguard_user');
+    setAuthenticatedUser(null);
+    setIsAuthenticated(false);
     setIsLocked(false);
   };
 
@@ -25,12 +36,11 @@ export default function App() {
 
   // Unlock Request Action (Redirect to AuthScreen)
   const handleUnlockRequest = () => {
-    setIsLocked(false);
-    setIsAuthenticated(false);
+    handleLogout();
   };
 
-  // 1. Initial Authentication View
-  if (!isAuthenticated) {
+  // 1. Initial Authentication View (Sign Up / Sign In)
+  if (!isAuthenticated || !authenticatedUser) {
     return <AuthScreen onAuthenticate={handleAuthenticate} />;
   }
 
@@ -44,6 +54,7 @@ export default function App() {
     <Home
       authenticatedUser={authenticatedUser}
       onLockSession={handleLockSession}
+      onLogout={handleLogout}
     />
   );
 }

@@ -34,11 +34,44 @@ class CanonicalIntent(BaseModel):
     status: str = "VALIDATED"  # "VALIDATED" | "REJECTED"
     slot_sources: Dict[str, str] = Field(default_factory=dict) # e.g. {"max_price_paise": "DETERMINISTIC_REGEX", "action": "LLM_INFERENCE"}
 
+import re
+from pydantic import field_validator
+
 class UserRegistration(BaseModel):
     name: str
     email: str
     password: str
+    phone: str = Field(default="+919876543210", description="Mobile number in E.164 format e.g. +919876543210")
+    address: str = Field(default="123 Tech Park, Bengaluru, KA", description="Delivery address")
     razorpay_mandate_token: Optional[str] = "mandate_token_demo_9921"
+
+    @field_validator('phone')
+    @classmethod
+    def validate_e164_phone(cls, v: str) -> str:
+        clean_v = v.strip()
+        if not clean_v.startswith("+"):
+            clean_v = f"+91{clean_v}"
+        if not re.match(r"^\+[1-9]\d{7,14}$", clean_v):
+            raise ValueError("Mobile number must be in valid E.164 format (e.g., +919876543210)")
+        return clean_v
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class UPICircleSetupRequest(BaseModel):
+    primary_vpa: str = Field(description="Primary user bank VPA e.g. user@upi")
+    per_txn_limit_paise: int = Field(default=500000, description="Max per-transaction limit in paise (hard cap ₹5,000)")
+    monthly_limit_paise: int = Field(default=1500000, description="Max monthly cumulative limit in paise (hard cap ₹15,000)")
+    upi_pin: Optional[str] = Field(default=None, description="4 or 6-digit Primary Bank UPI PIN for initial mandate authorization")
+
+    @field_validator('primary_vpa')
+    @classmethod
+    def validate_vpa(cls, v: str) -> str:
+        clean = v.strip()
+        if "@" not in clean or len(clean) < 4:
+            raise ValueError("Invalid VPA format. Must contain '@' e.g. user@upi")
+        return clean
 
 class UserPolicySchema(BaseModel):
     user_id: str
@@ -156,6 +189,8 @@ class TransactionExecuteRequest(BaseModel):
     quote_id: str
     user_id: str
     amount_paise: int
+    upi_vpa: Optional[str] = None
+    upi_pin: Optional[str] = None
 
 class AuditEventSchema(BaseModel):
     id: int

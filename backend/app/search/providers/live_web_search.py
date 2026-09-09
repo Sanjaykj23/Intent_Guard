@@ -1,6 +1,7 @@
 import re
 import json
 import urllib.parse
+import datetime
 import httpx
 from typing import List, Dict, Any
 from backend.app.core.config import settings
@@ -168,7 +169,7 @@ class LiveWebSearchAgent:
 
     def _generate_dynamic_products_from_query(self, query: str, category: str, max_price_paise: int = None) -> List[ProductResult]:
         q = query.lower()
-        now_str = datetime.datetime.utcnow().isoformat()
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         # Shoes / Footwear
         if any(w in q for w in ["shoe", "sneaker", "footwear", "running"]):

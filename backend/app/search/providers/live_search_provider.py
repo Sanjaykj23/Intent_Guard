@@ -17,7 +17,7 @@ class BaseSearchProvider:
 
 class LiveUniversalSearchProvider(BaseSearchProvider):
     async def search_products(self, query: str, max_price_paise: int = None) -> List[ProductResult]:
-        now_str = datetime.datetime.utcnow().isoformat()
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         q = (query or "").lower()
 
         results = [
@@ -76,7 +76,7 @@ class LiveUniversalSearchProvider(BaseSearchProvider):
         return results
 
     async def search_food(self, query: str, max_price_paise: int = None) -> List[ProductResult]:
-        now_str = datetime.datetime.utcnow().isoformat()
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         results = [
             ProductResult(
                 id="LIVE_PROD_TEA_01",

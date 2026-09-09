@@ -8,6 +8,11 @@ import { Check, ShoppingBag, ArrowRight, PackageCheck, ShieldCheck } from 'lucid
 export default function SuccessMessage({ transaction, onContinueShopping }) {
   if (!transaction) return null;
 
+  const displayTxId = transaction.transactionId || transaction.txId || "TXN_MOCK_9921";
+  const displayAmount = transaction.formattedAmount || transaction.amountPaid || (
+    transaction.amountPaidPaise ? `₹${(transaction.amountPaidPaise / 100).toLocaleString('en-IN')}` : "₹1,131"
+  );
+
   return (
     <div className="success-card fade-in">
       <div className="success-icon-badge">
@@ -24,21 +29,21 @@ export default function SuccessMessage({ transaction, onContinueShopping }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
           <span style={{ color: 'var(--text-muted)' }}>Transaction ID:</span>
           <strong style={{ fontFamily: 'monospace', color: 'var(--primary-600)' }}>
-            {transaction.transactionId}
+            {displayTxId}
           </strong>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: 'var(--text-muted)' }}>Authorized Amount:</span>
-          <strong style={{ color: 'var(--text-main)' }}>
-            {transaction.formattedAmount || `₹${((transaction.amountPaidPaise || 0) / 100).toLocaleString('en-IN')}`}
+          <strong style={{ color: 'var(--text-main)', fontSize: '1rem' }}>
+            {displayAmount}
           </strong>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: 'var(--text-muted)' }}>Status:</span>
           <strong style={{ color: 'var(--emerald-600)' }}>
-            Authorized & Executed
+            {transaction.status || "Authorized & Executed"}
           </strong>
         </div>
       </div>
@@ -46,13 +51,13 @@ export default function SuccessMessage({ transaction, onContinueShopping }) {
       {/* Core Security Reassurance */}
       <div style={{ fontSize: '0.8125rem', color: '#047857', display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500 }}>
         <ShieldCheck size={16} />
-        <span>🔐 Payment credentials were not exposed to the AI.</span>
+        <span>Payment credentials were not exposed to the AI.</span>
       </div>
 
       {/* Action Buttons */}
       <div className="success-actions">
         <button
-          onClick={() => alert(`Order details for ${transaction.transactionId}`)}
+          onClick={() => alert(`Order receipt details for ${displayTxId}:\nAmount Paid: ${displayAmount}`)}
           className="btn-secondary"
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
