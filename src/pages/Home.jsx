@@ -72,32 +72,35 @@ export default function Home({ onLockSession, authenticatedUser }) {
     setIsProcessing(true);
 
     try {
-      // Agent Acknowledgment
+      // 1. Process Intent via API Service
       const agentRes = await sendAgentMessage(userIntentText);
       const agentMsg = {
         id: `msg-agent-${Date.now()}`,
         sender: 'agent',
-        text: agentRes.reply,
+        text: agentRes.reply || "I analyzed your intent and retrieved verified candidates.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
       setMessages((prev) => [...prev, agentMsg]);
 
-      // Progressive Agent Activity Ticks
+      // 2. Progressive Agent Activity Visualization Ticks
       setIsProcessingActivity(true);
       setIsActivityComplete(false);
 
       const totalSteps = 8;
       for (let i = 0; i < totalSteps; i++) {
         setActivityStepIndex(i);
-        await new Promise((r) => setTimeout(r, 280));
+        await new Promise((r) => setTimeout(r, 180));
       }
 
-      // Search & Compare via Category-Aware API Service
-      const searchRes = await searchProducts(userIntentText);
-      const compareRes = await compareProducts(searchRes.products);
+      // 3. Extract products for display & user decision
+      let fetchedProducts = agentRes.result?.products || agentRes.products || [];
+      if (!fetchedProducts || fetchedProducts.length === 0) {
+        const searchRes = await searchProducts(userIntentText);
+        fetchedProducts = searchRes.products || [];
+      }
 
-      setProducts(compareRes.rankedProducts);
+      setProducts(fetchedProducts);
       setIsActivityComplete(true);
     } catch (err) {
       console.error("Error processing intent:", err);

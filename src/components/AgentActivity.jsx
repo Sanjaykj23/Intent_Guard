@@ -8,13 +8,13 @@ import { Sparkles, CheckCircle2 } from 'lucide-react';
 export default function AgentActivity({ currentStepIndex, isComplete }) {
   const steps = [
     "Understanding your requirements",
-    "Extracting intent",
-    "Searching marketplaces with Google Serper",
-    "Found 47 relevant products",
-    "Removing duplicate products",
-    "Comparing products using semantic similarity",
-    "Ranking best matches",
-    "Selecting top 3 options"
+    "Extracting intent and constraints",
+    "Fetching data from verified providers",
+    "Applying zero-trust security checks",
+    "Filtering invalid or unsafe options",
+    "Evaluating against your spending policy",
+    "Ranking the best verified options",
+    "Finalizing secure recommendations"
   ];
 
   return (

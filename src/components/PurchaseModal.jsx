@@ -12,9 +12,14 @@ export default function PurchaseModal({ product, onClose, onConfirmPurchase }) {
 
   if (!product) return null;
 
-  const productPrice = product.price;
+  const productTitle = product.name || product.title || "Product Item";
+  const pricePaise = product.price_paise ?? (product.price ? product.price * 100 : 0);
+  const productPrice = pricePaise / 100;
   const deliveryFee = 0;
   const totalAmount = productPrice + deliveryFee;
+  const merchantName = product.provider || product.merchant || product.platform || "Merchant";
+  const imageUrl = product.image_url || product.image || "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=600&auto=format&fit=crop&q=80";
+  const deliveryText = product.delivery || "Fast Delivery";
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -45,6 +50,7 @@ export default function PurchaseModal({ product, onClose, onConfirmPurchase }) {
             <span>Confirm Purchase</span>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={isProcessing}
             style={{ color: 'var(--text-muted)' }}
@@ -58,8 +64,8 @@ export default function PurchaseModal({ product, onClose, onConfirmPurchase }) {
           {/* Product Summary */}
           <div className="modal-product-summary">
             <img
-              src={product.image}
-              alt={product.name}
+              src={imageUrl}
+              alt={productTitle}
               className="modal-product-img"
               onError={(e) => {
                 e.target.src = "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80";
@@ -67,10 +73,10 @@ export default function PurchaseModal({ product, onClose, onConfirmPurchase }) {
             />
             <div>
               <h4 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                {product.name}
+                {productTitle}
               </h4>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                Merchant: <strong>{product.platform}</strong> • {product.delivery}
+                Merchant: <strong>{merchantName}</strong> • {deliveryText}
               </p>
             </div>
           </div>

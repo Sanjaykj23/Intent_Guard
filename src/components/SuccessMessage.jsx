@@ -31,7 +31,7 @@ export default function SuccessMessage({ transaction, onContinueShopping }) {
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: 'var(--text-muted)' }}>Authorized Amount:</span>
           <strong style={{ color: 'var(--text-main)' }}>
-            ₹{transaction.amountPaid?.toLocaleString('en-IN')}
+            {transaction.formattedAmount || `₹${((transaction.amountPaidPaise || 0) / 100).toLocaleString('en-IN')}`}
           </strong>
         </div>
 

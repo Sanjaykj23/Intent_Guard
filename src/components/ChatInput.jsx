@@ -8,7 +8,8 @@ import { Send, ShieldCheck } from 'lucide-react';
 export default function ChatInput({ onSendMessage, disabled }) {
   const [text, setText] = useState('');
 
-  const handleSend = () => {
+  const handleSend = (e) => {
+    if (e) e.preventDefault();
     if (!text.trim() || disabled) return;
     onSendMessage(text.trim());
     setText('');
@@ -23,7 +24,7 @@ export default function ChatInput({ onSendMessage, disabled }) {
 
   return (
     <div className="chat-input-sticky-container">
-      <div className="chat-input-box">
+      <form onSubmit={handleSend} className="chat-input-box">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -41,7 +42,7 @@ export default function ChatInput({ onSendMessage, disabled }) {
           </div>
 
           <button
-            onClick={handleSend}
+            type="submit"
             disabled={disabled || !text.trim()}
             className="btn-send"
             title="Send Intent"
@@ -50,7 +51,7 @@ export default function ChatInput({ onSendMessage, disabled }) {
             <Send size={16} />
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
