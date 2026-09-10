@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
 from backend.app.core.database import engine, Base
-from backend.app.api.v1 import auth, chat, policy, transactions, audit
+from backend.app.api.v1 import auth, chat, policy, transactions, audit, simulated_upi_api
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -26,6 +26,8 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(policy.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
+app.include_router(simulated_upi_api.router, prefix="/api")
+app.include_router(simulated_upi_api.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

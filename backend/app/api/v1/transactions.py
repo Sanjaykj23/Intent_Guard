@@ -52,11 +52,32 @@ async def execute_transaction(req: TransactionExecuteRequest, db: AsyncSession =
         )
 
     # 3. Fetch User Payment Mandate Token Hash
-    t_res = await db.execute(select(PaymentTokenMetadataModel).where(PaymentTokenMetadataModel.user_id == req.user_id))
-    token_meta = t_res.scalars().first()
-
+    tm_res = await db.execute(select(PaymentTokenMetadataModel).where(PaymentTokenMetadataModel.user_id == req.user_id))
+    token_meta = tm_res.scalars().first()
     token_hash = token_meta.token_hash_sha256 if token_meta else "TOKEN_HASH_SIMULATED_9921"
     tx_id = f"TXN_{uuid.uuid4().hex[:10].upper()}"
+
+    # Sync with Simulated UPI Circle Provider to update spend counters and debit bank
+    from backend.app.payment.upi_circle_provider import mock_upi_circle_provider
+    from backend.app.models.db_models import UPICircleMandateModel
+    
+    delegation = await mock_upi_circle_provider.get_delegation(req.user_id)
+    if delegation and delegation.get("status") == "ACTIVE":
+        await mock_upi_circle_provider.initiate_payment(
+            delegation_id=delegation["delegation_id"],
+            amount_paise=req.amount_paise,
+            merchant_vpa=req.upi_vpa or "merchant@demo",
+            category="SHOPPING",
+            transaction_id=tx_id,
+            merchant_name=quote.merchant_name or "Merchant Store"
+        )
+
+    # Sync with DB UPICircleMandateModel
+    m_res = await db.execute(select(UPICircleMandateModel).where(UPICircleMandateModel.primary_user_id == req.user_id))
+    db_mandate = m_res.scalars().first()
+    if db_mandate:
+        db_mandate.current_month_spend_paise = (db_mandate.current_month_spend_paise or 0) + req.amount_paise
+        await db.commit()
 
     # 4. Create Audit Entry for Payment Execution
     last_audit = await db.execute(select(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(1))

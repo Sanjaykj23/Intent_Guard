@@ -1,36 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Menu, Lock, ShieldCheck, User, Zap, LogOut, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Menu, Lock, ShieldCheck, User, Zap, LogOut, CheckCircle2, RefreshCw } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import ChatInput from '../components/ChatInput';
 import PurchaseModal from '../components/PurchaseModal';
 import AuthModal from '../components/AuthModal';
 import UPICircleSetupModal from '../components/UPICircleSetupModal';
-import { sendAgentMessage, searchProducts, compareProducts, purchaseProduct, getUPICircleStatus } from '../services/api';
+import UPICircleDashboard from '../components/UPICircleDashboard';
+import PaymentApprovalCard from '../components/PaymentApprovalCard';
+import { sendAgentMessage, purchaseProduct, getUPICircleStatus, evaluatePaymentDecision, initiatePaymentDecision, resetDemoData } from '../services/api';
 
 /**
  * Home Page Component — Main Dashboard & Intent Processing Controller
- * Manages one continuous AI session without financial balance displays or dummy data.
+ * Full Hackathon Prototype for AI Chatbot + Payment Decision Engine + Simulated UPI Circle + Mock Bank
  */
 export default function Home({ onLockSession, onLogout, authenticatedUser }) {
-  // Navigation & Session History States
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sessionChats, setSessionChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
 
-  // User & Auth Session States
   const [user, setUser] = useState(() => {
+    if (authenticatedUser) return authenticatedUser;
     const saved = localStorage.getItem('intentguard_user');
     if (saved) return JSON.parse(saved);
-    if (authenticatedUser) return authenticatedUser;
-    return null;
+    return { user_id: 'USER_DEFAULT_001', name: 'Sanjay Demo User', email: 'sanjay@demo.ai' };
   });
 
   const [hasUpiCircle, setHasUpiCircle] = useState(true);
+  const [showDashboard, setShowDashboard] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
 
-  // Messaging & Agent Pipeline States
   const [messages, setMessages] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isProcessingActivity, setIsProcessingActivity] = useState(false);
@@ -38,25 +38,38 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
   const [isActivityComplete, setIsActivityComplete] = useState(false);
   const [products, setProducts] = useState([]);
 
-  // Transaction States
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [pendingProductPurchase, setPendingProductPurchase] = useState(null);
   const [completedTransaction, setCompletedTransaction] = useState(null);
+  const [pendingApproval, setPendingApproval] = useState(null);
+  const [dashboardKey, setDashboardKey] = useState(0);
 
   useEffect(() => {
-    if (user?.token) {
-      localStorage.setItem('intentguard_user', JSON.stringify(user));
-      // Check UPI Circle Status
+    if (authenticatedUser) {
+      setUser(authenticatedUser);
+    }
+  }, [authenticatedUser]);
+
+  useEffect(() => {
+    if (user?.user_id) {
       getUPICircleStatus(user.token, user.user_id).then(res => {
-        setHasUpiCircle(res.has_mandate || res.mandate_status === 'ACTIVE');
+        setHasUpiCircle(res.has_mandate);
       });
+      refreshDashboard();
     }
   }, [user]);
 
+  const refreshDashboard = () => {
+    setDashboardKey(prev => prev + 1);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('upi_circle_updated'));
+    }
+  };
+
   const handleAuthSuccess = (userData) => {
     const formatted = {
-      user_id: userData.user_id || userData.agentUserId,
-      name: userData.name || userData.userName,
+      user_id: userData.user_id || 'USER_DEFAULT_001',
+      name: userData.name || 'Sanjay Demo User',
       email: userData.email,
       phone: userData.phone || '+919876543210',
       address: userData.address || '123 Tech Park, Bengaluru, KA',
@@ -64,46 +77,16 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
     };
     setUser(formatted);
     localStorage.setItem('intentguard_user', JSON.stringify(formatted));
-
-    if (userData.has_upi_circle) {
-      setHasUpiCircle(true);
-    } else {
-      setHasUpiCircle(false);
-      setIsUpiModalOpen(true);
-    }
-
-    if (pendingProductPurchase) {
-      setSelectedProduct(pendingProductPurchase);
-      setPendingProductPurchase(null);
-    }
-  };
-
-  const handleMandateCreated = (mandateData) => {
     setHasUpiCircle(true);
-    const updatedUser = { ...user, has_upi_circle: true, mandate_id: mandateData.mandate_id };
-    setUser(updatedUser);
-    localStorage.setItem('intentguard_user', JSON.stringify(updatedUser));
-
-    if (pendingProductPurchase) {
-      setSelectedProduct(pendingProductPurchase);
-      setPendingProductPurchase(null);
-    }
+    refreshDashboard();
   };
 
-  // New Chat Action (Clean Reset)
-  const handleNewChat = () => {
-    if (messages.length > 0) {
-      const firstUserMsg = messages.find(m => m.sender === 'user');
-      if (firstUserMsg) {
-        const newHistoryItem = {
-          id: `chat-${Date.now()}`,
-          title: firstUserMsg.text.length > 24 ? `${firstUserMsg.text.substring(0, 24)}...` : firstUserMsg.text,
-          messages: [...messages]
-        };
-        setSessionChats(prev => [newHistoryItem, ...prev]);
-      }
-    }
+  const handleMandateCreated = () => {
+    setHasUpiCircle(true);
+    refreshDashboard();
+  };
 
+  const handleNewChat = () => {
     setMessages([]);
     setIsProcessingActivity(false);
     setActivityStepIndex(0);
@@ -111,11 +94,12 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
     setProducts([]);
     setSelectedProduct(null);
     setCompletedTransaction(null);
+    setPendingApproval(null);
     setActiveChatId(null);
     setIsSidebarOpen(false);
   };
 
-  // Submit Intent Query
+  // Process natural language payment intent
   const handleSendIntent = async (userIntentText) => {
     if (isProcessing) return;
 
@@ -133,16 +117,132 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
     setIsActivityComplete(false);
     setProducts([]);
     setCompletedTransaction(null);
+    setPendingApproval(null);
 
-    try {
-      const result = await sendAgentMessage(userIntentText);
+    // Detect payment amounts & categories from natural language
+    const textLower = userIntentText.toLowerCase();
+    const priceMatch = userIntentText.match(/(?:₹|rs\.?|inr)?\s*(\d+(?:,\d+)*(?:\.\d+)?)/i);
+    const amountVal = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : null;
 
+    let category = "SHOPPING";
+    let merchant = "Demo Store";
+
+    if (textLower.includes("grocery") || textLower.includes("groceries")) {
+      category = "GROCERY";
+      merchant = "Demo Grocery Store";
+    } else if (textLower.includes("recharge") || textLower.includes("phone")) {
+      category = "MOBILE_RECHARGE";
+      merchant = "Demo Mobile Recharge";
+    } else if (textLower.includes("food") || textLower.includes("dinner") || textLower.includes("tea")) {
+      category = "FOOD";
+      merchant = "Demo Food Store";
+    } else if (textLower.includes("crypto")) {
+      category = "CRYPTO";
+      merchant = "Demo Crypto";
+    } else if (textLower.includes("casino") || textLower.includes("gambling")) {
+      category = "GAMBLING";
+      merchant = "Demo Casino";
+    } else if (textLower.includes("electronics") || textLower.includes("laptop")) {
+      category = "SHOPPING";
+      merchant = "Demo Electronics";
+    }
+
+    const isExplicitSearch = (
+      textLower.includes("find") ||
+      textLower.includes("search") ||
+      textLower.includes("show") ||
+      textLower.includes("recommend") ||
+      textLower.includes("looking for") ||
+      textLower.includes("compare") ||
+      textLower.includes("options") ||
+      textLower.includes("suggestions")
+    );
+
+    const hasPaymentVerb = (
+      textLower.includes("pay") ||
+      textLower.includes("recharge") ||
+      textLower.includes("transfer") ||
+      textLower.includes("send") ||
+      textLower.includes("buy") ||
+      textLower.includes("purchase") ||
+      textLower.includes("order") ||
+      textLower.includes("direct")
+    );
+
+    const isDirectPaymentIntent = amountVal && amountVal > 0 && (hasPaymentVerb || !isExplicitSearch) && !isExplicitSearch;
+
+    if (isDirectPaymentIntent && amountVal && amountVal > 0) {
       setActivityStepIndex(1);
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 400));
 
       setActivityStepIndex(2);
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 400));
 
+      // Invoke Payment Decision Engine
+      const decisionRes = await evaluatePaymentDecision({
+        amount: amountVal,
+        category: category,
+        merchant: merchant,
+        intent: "PURCHASE",
+        userId: user?.user_id || "USER_DEFAULT_001"
+      });
+
+      setIsProcessingActivity(false);
+
+      if (decisionRes.decision === "APPROVED") {
+        // Execute simulated payment
+        const execRes = await initiatePaymentDecision(decisionRes.transaction_id, 'APPROVE', user?.user_id);
+        
+        const formattedAmt = `₹${amountVal.toLocaleString('en-IN')}`;
+        setCompletedTransaction({
+          transactionId: decisionRes.transaction_id,
+          txId: decisionRes.transaction_id,
+          productTitle: `${merchant} Purchase`,
+          merchantName: merchant,
+          amountPaid: formattedAmt,
+          formattedAmount: formattedAmt,
+          status: "SUCCESS",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          text: `Payment checks passed:\n✓ Delegation active\n✓ Within ₹5,000 transaction limit\n✓ Within monthly budget\n✓ Merchant verified (${merchant})\n✓ Risk acceptable\n\nPayment of ${formattedAmt} executed successfully under UPI Circle delegation.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+
+        refreshDashboard();
+      } else if (decisionRes.decision === "REQUIRES_USER_APPROVAL") {
+        setPendingApproval(decisionRes);
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          text: `Payment of ₹${amountVal.toLocaleString('en-IN')} requires your explicit approval before execution.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isApprovalRequired: true,
+          approvalData: decisionRes
+        }]);
+      } else {
+        // DENIED
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          text: `Payment Denied by Payment Decision Engine.\n\nReason: ${decisionRes.reason || 'Policy check failed'} (Code: ${decisionRes.reason_code || 'DENIED'})`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isDenied: true,
+          deniedReason: decisionRes.reason
+        }]);
+      }
+
+      setIsProcessing(false);
+      return;
+    }
+
+    // Standard AI Product Search Workflow
+    try {
+      const result = await sendAgentMessage(userIntentText, user?.user_id);
+      setActivityStepIndex(2);
       setIsActivityComplete(true);
 
       const agentMessageObj = {
@@ -163,7 +263,7 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
       setMessages(prev => [...prev, {
         id: `msg-${Date.now() + 1}`,
         sender: 'agent',
-        text: "I encountered an issue processing your intent. Please try again.",
+        text: "I encountered an issue processing your request. Please try again.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
     } finally {
@@ -172,30 +272,16 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
     }
   };
 
-  // Select Product for Transaction Confirmation
   const handleSelectProduct = (product) => {
-    if (!user || !user.token) {
-      setPendingProductPurchase(product);
-      setIsAuthModalOpen(true);
-      return;
-    }
-
-    if (!hasUpiCircle) {
-      setPendingProductPurchase(product);
-      setIsUpiModalOpen(true);
-      return;
-    }
-
     setSelectedProduct(product);
   };
 
-  // Confirm Authorized Purchase
   const handleConfirmPurchase = async (product, totalAmount, options = {}) => {
     const params = {
       product: product,
       amount: totalAmount,
       quoteId: product.id ? `QUOTE_${product.id}` : "QUOTE_MOCK_1001",
-      userId: user?.user_id || "USER_DEFAULT_01",
+      userId: user?.user_id || "USER_DEFAULT_001",
       amountPaise: Math.round(totalAmount * 100),
       upiVpa: options.upiVpa || "sanjay@okicici",
       upiPin: options.upiPin || ""
@@ -205,7 +291,7 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
 
     if (txResult.success) {
       const formattedAmt = txResult.formattedAmount || `₹${Math.round(totalAmount).toLocaleString('en-IN')}`;
-      const txIdVal = txResult.transactionId || txResult.tx_id || `TXN_MOCK_${Math.floor(1000 + Math.random() * 9000)}`;
+      const txIdVal = txResult.transactionId || `TXN_${Math.floor(1000 + Math.random() * 9000)}`;
 
       setCompletedTransaction({
         transactionId: txIdVal,
@@ -214,26 +300,24 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
         merchantName: product.merchant || product.provider || "Merchant",
         amountPaid: formattedAmt,
         formattedAmount: formattedAmt,
-        amountPaidPaise: Math.round(totalAmount * 100),
-        status: txResult.status || "Authorized & Executed",
-        stepUpAuthenticated: txResult.step_up_authenticated || false,
-        razorpayTokenHash: txResult.razorpay_token_hash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        status: "SUCCESS",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
 
       setSelectedProduct(null);
+      refreshDashboard();
     }
     return txResult;
   };
 
-  // Continue Shopping Handler
-  const handleContinueShopping = () => {
-    setCompletedTransaction(null);
+  const handleResetDemo = async () => {
+    await resetDemoData(user?.user_id);
+    refreshDashboard();
+    handleNewChat();
   };
 
   return (
     <div className="app-layout font-sans">
-      {/* Navigation Sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -245,15 +329,13 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
         }}
       />
 
-      {/* Main Content Dashboard */}
       <main className="app-main-content">
-        {/* Top Header Bar */}
         <header className="top-bar">
           <div className="top-bar-left">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="btn-icon"
-              title="Toggle Navigation Menu"
+              title="Toggle Menu"
             >
               <Menu size={20} />
             </button>
@@ -262,37 +344,43 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
           </div>
 
           <div className="top-bar-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {/* User Profile / Auth Button */}
-            {user ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f1f5f9', padding: '0.375rem 0.75rem', borderRadius: '2rem', fontSize: '0.8125rem' }}>
-                <User size={16} style={{ color: '#2563eb' }} />
-                <span style={{ fontWeight: 600, color: '#1e293b' }}>{user.name}</span>
-                <button
-                  onClick={() => setIsAuthModalOpen(true)}
-                  style={{ background: 'none', border: 'none', fontSize: '0.70rem', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Edit Profile
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                style={{
-                  padding: '0.375rem 0.875rem',
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '2rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Sign In / Register
-              </button>
-            )}
+            <button
+              onClick={() => setShowDashboard(!showDashboard)}
+              style={{
+                background: 'rgba(37, 99, 235, 0.1)',
+                border: '1px solid rgba(37, 99, 235, 0.3)',
+                color: '#2563eb',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '2rem',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {showDashboard ? 'Hide Dashboard' : 'Show Dashboard'}
+            </button>
 
-            {/* UPI Circle Status Badge */}
+            <button
+              onClick={handleResetDemo}
+              title="Development-Only Hackathon Demo Reset"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#dc2626',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '2rem',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+            >
+              <RefreshCw size={12} />
+              <span>Reset Demo</span>
+            </button>
+
             <button
               onClick={() => setIsUpiModalOpen(true)}
               className="secure-payment-badge"
@@ -310,42 +398,27 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
                 fontWeight: 600
               }}
             >
-              {hasUpiCircle ? (
-                <>
-                  <CheckCircle2 size={16} />
-                  <span>UPI Circle Active</span>
-                </>
-              ) : (
-                <>
-                  <Zap size={16} />
-                  <span>Enable UPI Circle</span>
-                </>
-              )}
+              <CheckCircle2 size={16} />
+              <span>UPI Circle Active</span>
             </button>
 
-            {/* Lock Session Action */}
-            <button
-              onClick={onLockSession}
-              className="btn-lock"
-              title="Lock Intent Guard"
-              aria-label="Lock Intent Guard"
-            >
+            <button onClick={onLockSession} className="btn-lock" title="Lock Session">
               <Lock size={18} />
             </button>
 
-            {/* Logout / Switch Account Action */}
-            <button
-              onClick={onLogout || onLockSession}
-              className="btn-lock"
-              title="Log Out / Switch Account"
-              aria-label="Log Out / Switch Account"
-            >
+            <button onClick={onLogout || onLockSession} className="btn-lock" title="Log Out">
               <LogOut size={18} style={{ color: '#ef4444' }} />
             </button>
           </div>
         </header>
 
-        {/* Central Chat & Message Stream */}
+        {/* Dashboard Banner */}
+        {showDashboard && (
+          <div style={{ padding: '0 1.5rem' }}>
+            <UPICircleDashboard key={dashboardKey} user={user} onOpenSetup={() => setIsUpiModalOpen(true)} />
+          </div>
+        )}
+
         <ChatWindow
           messages={messages}
           onSendSuggestion={handleSendIntent}
@@ -355,23 +428,33 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
           products={products}
           onSelectProduct={handleSelectProduct}
           completedTransaction={completedTransaction}
-          onContinueShopping={handleContinueShopping}
+          onContinueShopping={() => setCompletedTransaction(null)}
         />
 
-        {/* Sticky Input Bar */}
+        {/* Render High Risk Approval Card if active */}
+        {pendingApproval && (
+          <div style={{ padding: '0 1.5rem 1rem 1.5rem' }}>
+            <PaymentApprovalCard
+              decisionData={pendingApproval}
+              onResolved={() => {
+                setPendingApproval(null);
+                refreshDashboard();
+              }}
+            />
+          </div>
+        )}
+
         <ChatInput
           onSendMessage={handleSendIntent}
           disabled={isProcessing}
         />
 
-        {/* Auth Modal (Sign Up / Sign In) */}
         <AuthModal
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           onAuthSuccess={handleAuthSuccess}
         />
 
-        {/* UPI Circle Onboarding Modal */}
         <UPICircleSetupModal
           isOpen={isUpiModalOpen}
           onClose={() => setIsUpiModalOpen(false)}
@@ -379,7 +462,6 @@ export default function Home({ onLockSession, onLogout, authenticatedUser }) {
           onMandateCreated={handleMandateCreated}
         />
 
-        {/* Purchase Confirmation Security Modal */}
         {selectedProduct && (
           <PurchaseModal
             product={selectedProduct}

@@ -294,6 +294,13 @@ async def setup_upi_circle_mandate(
 
     await db.commit()
 
+    from backend.app.payment.upi_circle_provider import mock_upi_circle_provider
+    await mock_upi_circle_provider.create_delegation(
+        primary_user_id=user_id,
+        monthly_limit_paise=monthly_cap,
+        transaction_limit_paise=per_txn_cap
+    )
+
     return {
         "success": True,
         "message": "UPI Circle delegation mandate setup successfully",

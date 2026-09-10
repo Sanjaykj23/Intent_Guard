@@ -43,7 +43,7 @@ export default function UPICircleSetupModal({ isOpen, onClose, user, onMandateCr
     setIsLoading(true);
 
     try {
-      const res = await setupUPICircleMandate(primaryVpa, perTxnPaise, monthlyPaise, user?.token, upiPin);
+      const res = await setupUPICircleMandate(primaryVpa, perTxnPaise, monthlyPaise, user?.token, upiPin, user?.user_id);
       if (res.success || res.mandate_id) {
         onMandateCreated(res);
         onClose();
