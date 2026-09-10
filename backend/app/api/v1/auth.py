@@ -351,3 +351,28 @@ async def get_upi_circle_status(
         "mandate_status": mandate.mandate_status
     }
 
+
+@router.post("/upi-circle/revoke")
+@router.delete("/upi-circle/setup")
+async def revoke_upi_circle_mandate(
+    current_user: UserModel = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    user_id = current_user.id
+    res = await db.execute(select(UPICircleMandateModel).where(UPICircleMandateModel.primary_user_id == user_id))
+    mandate = res.scalars().first()
+    if mandate:
+        mandate.mandate_status = "REVOKED"
+        await db.commit()
+
+    from backend.app.payment.upi_circle_provider import mock_upi_circle_provider
+    await mock_upi_circle_provider.revoke_delegation(user_id)
+
+    return {
+        "success": True,
+        "message": "UPI Circle delegation mandate revoked successfully",
+        "user_id": user_id,
+        "mandate_status": "REVOKED"
+    }
+
+

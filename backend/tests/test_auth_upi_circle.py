@@ -228,3 +228,50 @@ async def test_npci_cooling_off_2000_rupee_limit_escalation():
         assert "exceeds NPCI 24-hour cooling-off" in ctx_exceeds.step_up_reason
 
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_upi_circle_disconnected_rejects_and_connected_completes():
+    """
+    Test 4: If UPI Circle is disconnected/revoked, payment intent is DENIED with DELEGATION_DISCONNECTED.
+    If UPI Circle is re-connected/active, payment intent is APPROVED.
+    """
+    from backend.app.payment.upi_circle_provider import mock_upi_circle_provider
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with async_session() as session:
+        user_id = "USER_RULE_TEST_01"
+        user = UserModel(id=user_id, name="Test Rule User", email="rule@example.com", password_hash="pw")
+        session.add(user)
+        await session.commit()
+
+        # Step 1: Revoke/Disconnect delegation
+        await mock_upi_circle_provider.revoke_delegation(user_id)
+
+        req = PaymentIntentRequest(
+            user_id=user_id,
+            session_id="SESS_RULE_1",
+            item_id="PROD_SHIRT_01",
+            item_title="Statement T-Shirt",
+            claimed_price_paise=113100, # ₹1,131
+            merchant_vpa="nykaa@upi",
+            category="SHOPPING"
+        )
+
+        ctx_disconnected = await pde_engine.evaluate_intent(req, db=session)
+        assert ctx_disconnected.decision == DecisionStatus.DENIED
+        assert ctx_disconnected.reason_code == "DELEGATION_DISCONNECTED"
+        assert "disconnected or inactive" in ctx_disconnected.rejection_reason
+
+        # Step 2: Connect delegation
+        await mock_upi_circle_provider.create_delegation(primary_user_id=user_id)
+
+        ctx_connected = await pde_engine.evaluate_intent(req, db=session)
+        assert ctx_connected.decision == DecisionStatus.APPROVED
+
+    await engine.dispose()
+

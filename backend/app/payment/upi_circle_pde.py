@@ -359,24 +359,29 @@ class MandatePolicyFilter(BaseFilter):
         price_paise = req.claimed_price_paise
         now = datetime.now(timezone.utc)
 
-        # Retrieve delegation from provider abstraction
-        delegation = await mock_upi_circle_provider.get_delegation(req.user_id)
-        if not delegation or delegation.get("status") != "ACTIVE":
-            delegation = await mock_upi_circle_provider.get_delegation("USER_DEFAULT_001")
+        # Retrieve delegation strictly for user ID
+        user_id = req.user_id or "USER_DEFAULT_001"
+        delegation = await mock_upi_circle_provider.get_delegation(user_id)
 
-        if not delegation or delegation.get("status") != "ACTIVE":
-            delegation = await mock_upi_circle_provider.create_delegation(primary_user_id=req.user_id)
+        db_mandate_active = True
+        if ctx.db_session and user_id:
+            m_res = await ctx.db_session.execute(
+                select(UPICircleMandateModel).where(UPICircleMandateModel.primary_user_id == user_id)
+            )
+            db_mandate = m_res.scalars().first()
+            if db_mandate and db_mandate.mandate_status != "ACTIVE":
+                db_mandate_active = False
+
+        if not delegation or delegation.get("status") != "ACTIVE" or not db_mandate_active:
+            ctx.decision = DecisionStatus.DENIED
+            ctx.reason_code = "DELEGATION_DISCONNECTED"
+            ctx.rejection_reason = "Transaction Rejected: UPI Circle delegation is disconnected or inactive. Please connect UPI Circle to proceed with payments."
+            ctx.checks["delegation_exists"] = False
+            ctx.checks["delegation_active"] = False
+            return False
 
         ctx.mandate = delegation
         ctx.checks["delegation_exists"] = True
-
-        # Check Active Status
-        if delegation.get("status") != "ACTIVE":
-            ctx.decision = DecisionStatus.DENIED
-            ctx.reason_code = "DELEGATION_INACTIVE"
-            ctx.rejection_reason = "UPI Circle delegation is currently INACTIVE or REVOKED"
-            ctx.checks["delegation_active"] = False
-            return False
         ctx.checks["delegation_active"] = True
 
         # Check Expiration

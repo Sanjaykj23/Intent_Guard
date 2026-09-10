@@ -214,8 +214,8 @@ async def initiate_payment(req: InitiatePaymentSchema):
 
     # Execute payment via mock provider
     delegation = await mock_upi_circle_provider.get_delegation(user_id)
-    if not delegation:
-        raise HTTPException(status_code=400, detail="No active UPI Circle delegation found")
+    if not delegation or delegation.get("status") != "ACTIVE":
+        raise HTTPException(status_code=400, detail="Transaction Rejected: UPI Circle delegation is disconnected or inactive. Please connect UPI Circle to proceed with payments.")
 
     res = await mock_upi_circle_provider.initiate_payment(
         delegation_id=delegation["delegation_id"],

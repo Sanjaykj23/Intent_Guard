@@ -247,6 +247,25 @@ export default function PurchaseModal({ product, onClose, onConfirmPurchase }) {
             </div>
           )}
 
+          {errorMessage && (
+            <div style={{
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              marginTop: '0.75rem',
+              fontSize: '0.8125rem',
+              color: '#991B1B',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <AlertTriangle size={18} style={{ color: '#DC2626', flexShrink: 0 }} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* Security Checks */}
           <div className="security-checks-box" style={{ marginTop: '0.75rem' }}>
             <div className="check-item">

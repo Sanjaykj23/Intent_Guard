@@ -1,11 +1,16 @@
 package com.intentguard.backend.controller;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.intentguard.backend.dto.LoginRequest;
 import com.intentguard.backend.dto.LoginResponse;
 import com.intentguard.backend.service.AuthService;
+
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
 /**
  * AuthController

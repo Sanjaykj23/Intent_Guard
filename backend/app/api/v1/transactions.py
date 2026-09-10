@@ -62,6 +62,18 @@ async def execute_transaction(req: TransactionExecuteRequest, db: AsyncSession =
     from backend.app.models.db_models import UPICircleMandateModel
     
     delegation = await mock_upi_circle_provider.get_delegation(req.user_id)
+    m_res = await db.execute(select(UPICircleMandateModel).where(UPICircleMandateModel.primary_user_id == req.user_id))
+    db_mandate = m_res.scalars().first()
+
+    is_provider_active = delegation and delegation.get("status") == "ACTIVE"
+    is_db_active = db_mandate is not None and db_mandate.mandate_status == "ACTIVE"
+
+    if not (is_provider_active or is_db_active):
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction Rejected: UPI Circle delegation is disconnected or inactive. Please connect UPI Circle to proceed with payments."
+        )
+
     if delegation and delegation.get("status") == "ACTIVE":
         await mock_upi_circle_provider.initiate_payment(
             delegation_id=delegation["delegation_id"],
@@ -73,8 +85,6 @@ async def execute_transaction(req: TransactionExecuteRequest, db: AsyncSession =
         )
 
     # Sync with DB UPICircleMandateModel
-    m_res = await db.execute(select(UPICircleMandateModel).where(UPICircleMandateModel.primary_user_id == req.user_id))
-    db_mandate = m_res.scalars().first()
     if db_mandate:
         db_mandate.current_month_spend_paise = (db_mandate.current_month_spend_paise or 0) + req.amount_paise
         await db.commit()

@@ -228,7 +228,25 @@ export async function createSimulatedUPIDelegation(monthlyLimit = 15000, transac
 
 export async function revokeSimulatedUPIDelegation(userId = null) {
   const activeUserId = resolveActiveUserId(userId);
+  let authToken = null;
+  const saved = localStorage.getItem('intentguard_user');
+  if (saved) {
+    try {
+      authToken = JSON.parse(saved)?.token;
+    } catch(e){}
+  }
+
   try {
+    if (authToken) {
+      fetch(`${API_BASE_URL}/auth/upi-circle/revoke`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        }
+      }).catch(() => {});
+    }
+
     const res = await fetch(`${API_ROOT_URL}/upi-circle/delegation?user_id=${activeUserId}`, {
       method: "DELETE"
     });
@@ -236,7 +254,7 @@ export async function revokeSimulatedUPIDelegation(userId = null) {
   } catch (err) {
     console.warn("Error revoking delegation", err);
   }
-  return { success: true };
+  return { success: true, status: "INACTIVE" };
 }
 
 export async function evaluatePaymentDecision({ amount, category = "GROCERY", merchant = "Demo Grocery Store", intent = "PURCHASE", userId = null }) {
@@ -406,6 +424,14 @@ export async function purchaseProduct(params) {
       intent: "PURCHASE",
       userId: userId
     });
+    if (decRes && decRes.decision === "DENIED") {
+      return {
+        success: false,
+        status: "REJECTED",
+        transactionId: null,
+        message: decRes.reason || "Transaction Rejected: UPI Circle delegation is disconnected or inactive. Please connect UPI Circle to proceed with payments."
+      };
+    }
     if (decRes && decRes.transaction_id) {
       await initiatePaymentDecision(decRes.transaction_id, 'APPROVE', userId);
     }
